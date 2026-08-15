@@ -241,6 +241,25 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
+  // IPC Event Listener: Error
+  window.api.onDownloadError((data) => {
+    const id = cleanId(data.url);
+    const card = activeDownloads[id];
+    if (card) {
+      const fill = card.querySelector('.progress-bar-fill');
+      const statusBadge = card.querySelector('.status-badge');
+      const speed = card.querySelector('.speed-text');
+
+      fill.style.width = '100%';
+      fill.style.background = 'var(--danger)';
+      statusBadge.className = 'status-badge status-badge-error';
+      statusBadge.style.background = 'rgba(239, 68, 68, 0.15)';
+      statusBadge.style.color = 'var(--danger)';
+      statusBadge.textContent = '❌ Error';
+      speed.textContent = data.error || 'Fallo en la descarga';
+    }
+  });
+
   function updateDownloadsCount() {
     const count = Object.keys(activeDownloads).length;
     downloadsCount.textContent = `${count} descargas`;

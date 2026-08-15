@@ -11,5 +11,8 @@ contextBridge.exposeInMainWorld('api', {
   },
   onDownloadComplete: (callback) => {
     ipcRenderer.on('download-complete', (event, data) => callback(data));
+  },
+  onDownloadError: (callback) => {
+    ipcRenderer.on('download-error', (event, data) => callback(data));
   }
 });
