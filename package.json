@@ -1,0 +1,27 @@
+{
+  "name": "omni-media-downloader",
+  "version": "1.0.0",
+  "description": "Aplicacion de escritorio para descargar videos de YouTube, Instagram, TikTok y Facebook sin marca de agua y en alta calidad.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "youtube-downloader",
+    "tiktok-downloader",
+    "instagram-reels",
+    "facebook-video-downloader",
+    "electron",
+    "yt-dlp",
+    "media-downloader"
+  ],
+  "author": "Christian Herencia",
+  "license": "MIT",
+  "dependencies": {
+    "yt-dlp-exec": "^1.0.2"
+  },
+  "devDependencies": {
+    "electron": "^31.2.0"
+  }
+}
