@@ -24,6 +24,7 @@ if (!fs.existsSync(binDir)) {
   fs.mkdirSync(binDir, { recursive: true });
 }
 const ytDlpPath = path.join(binDir, 'yt-dlp.exe');
+const ffmpegPath = path.join(binDir, 'ffmpeg.exe');
 
 // Helper to auto-download yt-dlp binary if missing
 function ensureYtDlpBinary() {
@@ -34,7 +35,7 @@ function ensureYtDlpBinary() {
     console.log('Downloading yt-dlp binary...');
     const file = fs.createWriteStream(ytDlpPath);
     const downloadUrl = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe';
-    
+
     https.get(downloadUrl, (response) => {
       if (response.statusCode === 302 || response.statusCode === 301) {
         https.get(response.headers.location, (redirectResponse) => {
@@ -49,9 +50,7 @@ function ensureYtDlpBinary() {
           file.close(() => resolve(ytDlpPath));
         });
       }
-    }).on('error', () => {
-      resolve(null);
-    });
+    }).on('error', () => resolve(null));
   });
 }
 
@@ -124,11 +123,16 @@ ipcMain.handle('inspect-media', async (event, url) => {
       '--no-warnings',
       '--no-playlist',
       '--js-runtimes', 'node',
-      '--extractor-args', 'youtube:player_client=android,web,ios',
-      '--user-agent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1'
+      '--extractor-args', 'youtube:player_client=android,web,ios'
     ];
 
-    exec(`"${binExecutable}" ${cmdArgs.map(a => `"${a}"`).join(' ')}`, { maxBuffer: 1024 * 1024 * 10 }, (error, stdout) => {
+    if (fs.existsSync(ffmpegPath)) {
+      cmdArgs.push('--ffmpeg-location', binDir);
+    }
+
+    const envPath = `${binDir};${process.env.PATH}`;
+
+    exec(`"${binExecutable}" ${cmdArgs.map(a => `"${a}"`).join(' ')}`, { env: { ...process.env, PATH: envPath }, maxBuffer: 1024 * 1024 * 10 }, (error, stdout) => {
       if (error || !stdout) {
         return resolve({
           success: true,
@@ -174,7 +178,6 @@ ipcMain.handle('start-download', async (event, options) => {
   const platform = detectPlatform(url);
 
   return new Promise(async (resolve) => {
-    // Generate clean output filename pattern
     const outputPattern = path.join(targetFolder, '%(title).100s.%(ext)s');
     let args = [
       url,
@@ -185,28 +188,30 @@ ipcMain.handle('start-download', async (event, options) => {
       '--extractor-args', 'youtube:player_client=android,web,ios'
     ];
 
-    // User-agent customization per platform
+    if (fs.existsSync(ffmpegPath)) {
+      args.push('--ffmpeg-location', binDir);
+    }
+
     if (platform === 'Instagram') {
       args.push('--user-agent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1');
       args.push('--add-header', 'Accept-Language:es-ES,es;q=0.9');
     } else if (platform === 'TikTok') {
       args.push('--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
-    } else {
-      args.push('--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
     }
 
     if (format === 'mp3') {
       args.push('-x', '--audio-format', 'mp3', '--audio-quality', '0');
     } else if (quality === 'best') {
-      args.push('-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best/b');
+      args.push('-f', 'b/best[ext=mp4]/bestvideo+bestaudio/best');
     } else if (quality === '720p') {
-      args.push('-f', 'bestvideo[height<=720]+bestaudio/best[height<=720]/best/b');
+      args.push('-f', 'b[height<=720]/best[height<=720]/best');
     } else {
-      args.push('-f', 'best[ext=mp4]/best/b');
+      args.push('-f', 'b/best[ext=mp4]/best');
     }
 
     console.log(`Executing: ${binExecutable} ${args.join(' ')}`);
-    const proc = spawn(binExecutable, args, { windowsHide: true });
+    const envPath = `${binDir};${process.env.PATH}`;
+    const proc = spawn(binExecutable, args, { windowsHide: true, env: { ...process.env, PATH: envPath } });
     let lastStderr = '';
 
     proc.stdout.on('data', (data) => {
@@ -235,13 +240,11 @@ ipcMain.handle('start-download', async (event, options) => {
         event.sender.send('download-complete', { url, success: true, targetFolder });
         resolve({ success: true, targetFolder });
       } else {
-        // Attempt secondary API fallback for TikTok or Instagram
         const fallbackResult = await trySecondaryScraperFallback(url, targetFolder, event);
         if (fallbackResult.success) {
           event.sender.send('download-complete', { url, success: true, targetFolder });
           resolve({ success: true, targetFolder });
         } else {
-          // Report REAL error to UI - do NOT pretend completion!
           let errorMsg = 'No se pudo descargar el contenido. Comprueba la URL o que el vídeo sea público.';
           if (lastStderr.includes('empty media response') || lastStderr.includes('login')) {
             errorMsg = 'Instagram requiere inicio de sesión para esta publicación o la cuenta es privada.';
