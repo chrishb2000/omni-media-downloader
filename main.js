@@ -124,6 +124,7 @@ ipcMain.handle('inspect-media', async (event, url) => {
       '--no-warnings',
       '--no-playlist',
       '--js-runtimes', 'node',
+      '--extractor-args', 'youtube:player_client=android,web,ios',
       '--user-agent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1'
     ];
 
@@ -180,7 +181,8 @@ ipcMain.handle('start-download', async (event, options) => {
       '-o', outputPattern,
       '--no-mtime',
       '--no-playlist',
-      '--js-runtimes', 'node'
+      '--js-runtimes', 'node',
+      '--extractor-args', 'youtube:player_client=android,web,ios'
     ];
 
     // User-agent customization per platform
