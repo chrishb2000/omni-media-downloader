@@ -4,7 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const https = require('https');
 const http = require('http');
-const { spawn, exec } = require('child_process');
+const { spawn } = require('child_process');
 
 let mainWindow;
 let defaultDownloadPath = path.join(os.homedir(), 'Downloads', 'OmniDownloads');
@@ -18,7 +18,7 @@ if (!fs.existsSync(defaultDownloadPath)) {
   }
 }
 
-// Ensure bin folder exists and check for yt-dlp binary
+// Ensure bin folder exists and check for yt-dlp & ffmpeg binaries
 const binDir = path.join(__dirname, 'bin');
 if (!fs.existsSync(binDir)) {
   fs.mkdirSync(binDir, { recursive: true });
@@ -131,41 +131,49 @@ ipcMain.handle('inspect-media', async (event, url) => {
     }
 
     const envPath = `${binDir};${process.env.PATH}`;
+    const proc = spawn(binExecutable, cmdArgs, { windowsHide: true, env: { ...process.env, PATH: envPath } });
+    let stdout = '';
 
-    exec(`"${binExecutable}" ${cmdArgs.map(a => `"${a}"`).join(' ')}`, { env: { ...process.env, PATH: envPath }, maxBuffer: 1024 * 1024 * 10 }, (error, stdout) => {
-      if (error || !stdout) {
-        return resolve({
-          success: true,
-          fallback: true,
-          url,
-          title: detectPlatformTitle(url),
-          platform: detectPlatform(url),
-          thumbnail: getPlatformPlaceholderThumbnail(url),
-          duration: 'N/A'
-        });
+    proc.stdout.on('data', (data) => {
+      stdout += data.toString();
+    });
+
+    proc.on('close', (code) => {
+      if (code === 0 && stdout) {
+        try {
+          const info = JSON.parse(stdout);
+          return resolve({
+            success: true,
+            title: info.title || detectPlatformTitle(url),
+            platform,
+            thumbnail: info.thumbnail || info.thumbnails?.[0]?.url || getPlatformPlaceholderThumbnail(url),
+            duration: info.duration_string || (info.duration ? `${Math.floor(info.duration / 60)}:${info.duration % 60}` : 'N/A'),
+            uploader: info.uploader || info.channel || 'Autor Detectado'
+          });
+        } catch (e) {}
       }
 
-      try {
-        const info = JSON.parse(stdout);
-        resolve({
-          success: true,
-          title: info.title || detectPlatformTitle(url),
-          platform,
-          thumbnail: info.thumbnail || info.thumbnails?.[0]?.url || getPlatformPlaceholderThumbnail(url),
-          duration: info.duration_string || (info.duration ? `${Math.floor(info.duration / 60)}:${info.duration % 60}` : 'N/A'),
-          uploader: info.uploader || info.channel || 'Autor Detectado'
-        });
-      } catch (e) {
-        resolve({
-          success: true,
-          fallback: true,
-          url,
-          title: detectPlatformTitle(url),
-          platform,
-          thumbnail: getPlatformPlaceholderThumbnail(url),
-          duration: 'N/A'
-        });
-      }
+      resolve({
+        success: true,
+        fallback: true,
+        url,
+        title: detectPlatformTitle(url),
+        platform,
+        thumbnail: getPlatformPlaceholderThumbnail(url),
+        duration: 'N/A'
+      });
+    });
+
+    proc.on('error', () => {
+      resolve({
+        success: true,
+        fallback: true,
+        url,
+        title: detectPlatformTitle(url),
+        platform,
+        thumbnail: getPlatformPlaceholderThumbnail(url),
+        duration: 'N/A'
+      });
     });
   });
 });
@@ -202,11 +210,11 @@ ipcMain.handle('start-download', async (event, options) => {
     if (format === 'mp3') {
       args.push('-x', '--audio-format', 'mp3', '--audio-quality', '0');
     } else if (quality === 'best') {
-      args.push('-f', 'b/best[ext=mp4]/bestvideo+bestaudio/best');
+      args.push('-f', 'b/best[ext=mp4]/bestvideo+bestaudio/best/b');
     } else if (quality === '720p') {
-      args.push('-f', 'b[height<=720]/best[height<=720]/best');
+      args.push('-f', 'b[height<=720]/best[height<=720]/best/b');
     } else {
-      args.push('-f', 'b/best[ext=mp4]/best');
+      args.push('-f', 'b/best[ext=mp4]/best/b');
     }
 
     console.log(`Executing: ${binExecutable} ${args.join(' ')}`);
