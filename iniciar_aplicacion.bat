@@ -6,6 +6,11 @@ echo         OmniMedia Downloader Pro - Initializer
 echo ========================================================
 echo.
 
+if exist .git (
+    echo [INFO] Checking for latest updates from repository...
+    git pull origin main >nul 2>&1
+)
+
 node -v >nul 2>&1
 if %errorlevel% neq 0 (
     echo [ERROR] Node.js is not installed on this system.
@@ -29,4 +34,3 @@ if not exist node_modules (
 echo [INFO] Starting OmniMedia Downloader Pro...
 echo.
 call npm start
-
